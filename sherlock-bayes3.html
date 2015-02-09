@@ -105,7 +105,7 @@ var chart=makeEvidenceChart(pDist,NUM_CATEGORIES)
 //console.log(chart)
 //console.log("query test", chart.query(3,1,0.5))
 
-function makeChartUI(chart,x,y){
+function makeChartUI(chart,categories, x,y){
 	var chartUI=[]
 	for (var i=0;i<chart.length;i++) {
 		var column=[]
@@ -119,8 +119,7 @@ function makeChartUI(chart,x,y){
 			div.style.left=i*(parseInt(div.style.width)+1)+x
 
 			div.style.textAlign="center"
-			var category=["</br>Fingerprints", "</br>Motive", "</br>Alibi", "</br>Character", "</br>Eyewitnesses"]
-			div.innerHTML=category[j]
+			div.innerHTML="</br>"+categories[j]
 			div.prevQ=[] // new thing. keeps track of previous queries.
 			div.suspect=i
 			div.category=j
@@ -184,23 +183,25 @@ function makeSpan(q,i,width,height) {
 	return text
 }
 
-var chartUI=makeChartUI(chart,240,250)
+var suspectName=["Alice","Bob","Carol","Dan"]
+var categoryName=["Forensics", "Motive","Alibi","Character","Witnesses"]
+var chartUI=makeChartUI(chart,categoryName,240,250)
 
 function processClick(suspect,category,chart,chartUI,pDist){
 	//console.log("before",pDist)
-	var cost=10
+	var cost=8
 	var acccuracy
 	//var accuracy=Math.random()*0.5+0.5 //maybe make accuracy based on category
 	switch (category) {
 		case 0:
 			accuracy=0.85+0.15*2*(Math.random()-0.5)
-			cost+=5
+			cost+=4
 			//fingerprints: high accuracy, high cost
 			break
 		case 1:
 			accuracy=0.75+0.15*2*(Math.random()-0.5)
-			cost+=Math.round((Math.random()-0.5)*5)
-			//motive: variable cost
+			cost+=Math.round((Math.random()-0.5)*4)
+			//motive: variable cost // maybe lower accuracy but higher trigger chance?
 			break
 		case 2:
 			accuracy=0.75+0.15*2*(Math.random()-0.5)
@@ -209,7 +210,7 @@ function processClick(suspect,category,chart,chartUI,pDist){
 			break
 		case 3:
 			accuracy=0.65+0.15*2*(Math.random()-0.5)
-			cost-=5
+			cost-=4
 			//character witnesses: low accuracy, low cost
 			break
 		case 4:
@@ -221,6 +222,8 @@ function processClick(suspect,category,chart,chartUI,pDist){
 	//if (Math.random()<0.5) {accuracy=1}
 	//accuracy=1
 	//console.log(cost)
+
+	//do math
 	var result=chart.query(suspect,category,accuracy)
 	var q={result:result, suspect:suspect, category:category, accuracy:accuracy}
 	var post=bayesTheorem(q,pDist,chartUI)
@@ -229,8 +232,8 @@ function processClick(suspect,category,chart,chartUI,pDist){
 	}
 	pBars.update(pDist)
 	pDistReport.update(pDist)
-	//var pTrue=accuracy
-	//if (!result) {pTrue=1-pTrue}
+	
+	//report query
 	var box=chartUI[suspect][category]
 	box.innerHTML=""
 	//if (box.prevQ.length>9) {box.prevQ.shift()}
@@ -242,12 +245,23 @@ function processClick(suspect,category,chart,chartUI,pDist){
 			$(reportQ).animate({fontSize:"+=4", left:"-=2"},"fast").animate({fontSize:"-=4",left:"+=2"},"fast")
 		}
 	}
-	
+
+	//suspects talk
+	suspectBubble.fadeIn("I swear I'm innocent!",suspect)
+	chartUI[suspect][category].onmouseleave=function(){
+		suspectBubble.fadeOut()
+		chartUI[suspect][category].onmouseleave=function(){}
+	}
 
 	//chartUI[suspect][category].innerHTML=result+"<br>"+Math.round(accuracy*100)+"%"
 	//console.log("after",pDist)
-}
 
+	//resources, reporting
+	gameState.resources-=cost
+	gameStateUI.update(gameState)
+
+}
+/*
 var answersButton=document.createElement("BUTTON")
 answersButton.style.position="absolute"
 answersButton.style.top=300
@@ -261,7 +275,7 @@ answersButton.onclick=function(){
 
 	}
 }
-
+*/
 function reveal(chart,chartUI){
 	for (var i=0;i<chartUI.length;i++){
 		for (var j=0;j<chartUI[0].length;j++){
@@ -343,9 +357,7 @@ function likelihood(q,suspect,chartUI) { //P(qResult for qSuspect|suspect)
 		if (q.result){return pTrue}
 		else {return 1-pTrue}
 	}
-}
-
-//console.log(likelihood(true,1,0.9,0))
+} //console.log(likelihood(true,1,0.9,0))
 
 function denominator(q,priors,chartUI){ //P(result)
 	var prob=0
@@ -446,7 +458,7 @@ function makePBars(pDist,width,x,y){ //array of array of divs
 	return pBars
 }
 
-var pBars=makePBars(pDist,parseInt(chartUI[0][0].style.width),275,140)
+var pBars=makePBars(pDist,parseInt(chartUI[0][0].style.width),275,137)
 
 function reportPDist(pDist,width,x,y){
 	pDistReport=[]
@@ -483,7 +495,7 @@ function reportPDist(pDist,width,x,y){
 	return pDistReport
 }
 
-var pDistReport=reportPDist(pDist,parseInt(chartUI[0][0].style.width),270,145)
+var pDistReport=reportPDist(pDist,parseInt(chartUI[0][0].style.width),270,141)
 
 
 function makePortraits(n,width,x,y){
@@ -503,6 +515,9 @@ function makePortraits(n,width,x,y){
 function accuse(portrait){
 	console.log(portrait.src)
 	reveal(chart,chartUI)
+	//console.log(parseInt(portrait.src.charAt(portrait.src.length-5))===chart.culprit,parseInt(portrait.src.charAt(portrait.src.length-5)),chart.culprit)
+	gameState.endCase(parseInt(portrait.src.charAt(portrait.src.length-5))===chart.culprit)
+	gameStateUI.update(gameState)
 }
 
 function makePriorsBoxes(pDist,width,x,y) {
@@ -525,6 +540,13 @@ function makePriorsBoxes(pDist,width,x,y) {
 }
 
 function makeDetectiveBubble(text,buttonArray,width,height,x,y){
+	var bubbleArrow=document.createElement("IMG")
+	bubbleArrow.src="bubbleArrow.png"
+	postBody.appendChild(bubbleArrow)
+	bubbleArrow.style.position="absolute"
+	bubbleArrow.style.top=y+height
+	bubbleArrow.style.left=x+width-80
+	
 	var div=document.createElement("DIV")
 	div.style.width=width
 	div.style.height=height-20
@@ -577,23 +599,154 @@ function makeDetectiveBubble(text,buttonArray,width,height,x,y){
 	return bubble
 }
 
+function makeSuspectBubble(text,i,spacing,width,height,x,y){
+	var bubbleArrow=document.createElement("IMG")
+	bubbleArrow.src="bubbleArrow.png"
+	postBody.appendChild(bubbleArrow)
+	bubbleArrow.spacingParameters={xi:x,spacing:spacing}//new thing
+	bubbleArrow.style.position="absolute"
+	bubbleArrow.height=30
+	bubbleArrow.style.top=y+height+6
+	bubbleArrow.style.left=x+60+spacing*i
+
+	//bubbleArrow.style.visibility="hidden"
+	var div=document.createElement("DIV")
+	div.style.width=width
+	div.style.height=height
+	div.style.position="absolute"
+	div.style.top=y
+	div.style.left=x
+	div.style.backgroundColor="white"
+	div.style.borderRadius=3
+	div.style.padding=3
+	div.innerHTML=text
+	//div.style.visibility="hidden"
+	postBody.appendChild(div)
+	var suspectBubble={text:div,arrow:bubbleArrow}
+	$(suspectBubble.text).fadeOut(0)//.fadeOut(4000)
+	$(suspectBubble.arrow).fadeOut(0)//.fadeOut(4000)
+	suspectBubble.fadeIn=function(text,i){
+		//console.log("visible:",suspectBubble.text.style.visibility,suspectBubble.arrow.style.visibility)
+		suspectBubble.text.innerHTML=text
+		suspectBubble.arrow.style.left=suspectBubble.arrow.spacingParameters.xi+60+suspectBubble.arrow.spacingParameters.spacing*i
+		//console.log("suspectBubble",text,suspectBubble.text,suspectBubble.arrow)
+		$(suspectBubble.text).fadeIn(20)//.fadeOut(4000)
+		$(suspectBubble.arrow).fadeIn(20)//.fadeOut(4000)
+	}
+	suspectBubble.fadeOut=function(){
+		//console.log("visible:",suspectBubble.text.style.visibility,suspectBubble.arrow.style.visibility)
+		//suspectBubble.text.innerHTML=text
+		//console.log("suspectBubble",text,suspectBubble.text,suspectBubble.arrow)
+		$(suspectBubble.text).fadeOut(20)//.fadeOut(4000)
+		$(suspectBubble.arrow).fadeOut(20)//.fadeOut(4000)
+	}
+	return suspectBubble
+}
+
+var suspectBubble=makeSuspectBubble("I didn't do it!", 0, parseInt(chartUI[0][0].style.width),375,14,250,160)
+
+
 function processButton(buttonName){
-	if (buttonName==="test"){
+	if (buttonName==="test" || buttonName==="hard"){
 		speechBubble.update("well, apparently this works",["yeah","nowWhat"])
+		suspectBubble.fadeIn("new message",1)
+	} if (buttonName==="nowWhat") {
+		suspectBubble.fadeOut()
+		gameState.newCase()
+		gameStateUI.update(gameState)
+		//console.log(foo.selector.selectedIndex)
+		//foo.selector.selectedIndex="2"
 	}
 	console.log(buttonName)
 }
 
-var speechBubble=makeDetectiveBubble("Hello everyone. I'm Sherlock Bayes.</br></br>",["Next","test","reset"],220,225,13,13)
+function makeSherlockBayes(x,y){
+	var sherlockBayesPortrait=document.createElement("IMG")
+	sherlockBayesPortrait.src="sherlockBayes180.png"
+	sherlockBayesPortrait.style.position="absolute"
+	sherlockBayesPortrait.style.top=x
+	sherlockBayesPortrait.style.left=y
+	postBody.appendChild(sherlockBayesPortrait)
+}
+
+var sherlockBayesPortrait=makeSherlockBayes(245,30)
+
+var gameState={difficulty:0,resources:100,pGoal:0.8,score:0,reward:100,penalty:-400,caseNumber:1,status:[],
+	newCase:function(){
+		var pGoal=0.39*Math.random()+0.6
+		gameState.pGoal=pGoal
+		var ratio=pGoal/(1-pGoal)
+		gameState.resources=Math.round(100*Math.log(ratio)/Math.log(4))
+		gameState.reward=Math.floor((gameState.resources-100)*0.2+100)
+		gameState.penalty=-Math.round(gameState.reward*ratio)
+		console.log("reward/penalty",gameState,pGoal,ratio)
+	},
+	endCase:function(win){
+		gameState.score+=gameState.resources
+		if (win) {gameState.score+=gameState.reward} else {gameState.score+=gameState.penalty}
+		gameState.caseNumber++
+	}
+}
+
+
+function makeGameStateUI(gameState,x,y) {
+	var selector=document.createElement("SELECT")
+	var difficulties=["Difficulty:Tutorial","Difficulty:Easy","Difficulty:Medium","Difficulty:Hard"]
+	for (var i=0;i<4;i++){
+		var option=new Option(difficulties[i],i)//document.createElement("OPTION")
+		//option.text=difficulties[i]
+		selector.add(option)
+	}
+	selector.selectedIndex=2
+
+	//selector.style.position="absolute"
+	//selector.style.top=3
+	var text="Resources:"+gameState.resources+"</BR>"+
+	"Certainty Goal:"+Math.round(gameState.pGoal*100)+"%"+"</BR>"+
+	"Reward:"+gameState.reward+"</BR>"+
+	"Penalty:"+gameState.penalty+"</BR>"+
+	"Score:"+gameState.score+"</BR>"+
+	"Case #:"+gameState.caseNumber
+	var textDiv=document.createElement("DIV")
+	textDiv.innerHTML=text
+	var div=document.createElement("DIV")
+	div.style.width=200
+	//div.style.height=110
+	div.style.position="absolute"
+	div.style.top=y
+	div.style.left=x
+	div.style.backgroundColor="white"
+	div.style.padding=3
+	div.appendChild(selector)
+	div.appendChild(textDiv)
+	postBody.appendChild(div)
+
+
+	gameStateUI={div:div,selector:selector,textDiv:textDiv,
+		update:function(gameState){
+			console.log("got here")
+			gameStateUI.selector.selectedIndex=gameState.difficulty
+			var text="Resources:"+gameState.resources+"</BR>"+
+			"Certainty Goal:"+Math.round(gameState.pGoal*100)+"%"+"</BR>"+
+			"Reward:"+gameState.reward+"</BR>"+
+			"Penalty:"+gameState.penalty+"</BR>"+
+			"Score:"+gameState.score+"</BR>"+
+			"Case #:"+gameState.caseNumber
+			gameStateUI.textDiv.innerHTML=text
+		}
+	}
+	return gameStateUI
+}
+
+var gameStateUI=makeGameStateUI(gameState,12,460)
+//foo.selector.selectedIndex="2"
+
+
+var speechBubble=makeDetectiveBubble("Hello. I'm Sherlock Bayes. Are you a logical thinker? Then help me solve a gruesome murder mystery.</br></br>",["Tutorial","easy","medium","hard"],220,225,13,13)
 
 var portraits=makePortraits(4,chartUI[0][0].style.width,260,185)
 var priorBoxes=makePriorsBoxes(pDist,parseInt(chartUI[0][0].style.width),240,525)
-var sherlockBayesPortrait=document.createElement("IMG")
-sherlockBayesPortrait.src="sherlockBayes180.png"
-sherlockBayesPortrait.style.position="absolute"
-sherlockBayesPortrait.style.top=240
-sherlockBayesPortrait.style.left=30
-postBody.appendChild(sherlockBayesPortrait)
+
 
 
 
