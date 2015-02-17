@@ -173,7 +173,7 @@ function makeSpan(q,i,width,height) {
 	//text.style.fontWeight="bold"
 	text.style.left=Math.floor(index[i%9]/3)*width+width*0.08+"px"
 	text.style.top=index[i%9]%3*height+"px"
-	console.log(i,index,text.style.left,text.style.top,width,height)
+	//console.log(i,index,text.style.left,text.style.top,width,height)
 	return text
 }
 
@@ -295,17 +295,105 @@ for (var i=0;i<total;i++){
 console.log("theory:",pSum/total," experiment:",right/total)
 //*/
 
-function pFalseSuspicion(q,chartUI){ // the probability of having "true" even if innocent, takes previous q into account
-	var prob=P_FALSELY-Math.pow(P_FALSELY,NUM_CATEGORIES)/NUM_CATEGORIES
-	var qList=chartUI[q.suspect][q.category].prevQ
-	for (var i=0;i<qList.length;i++){
-		var likelihood=qList[i].accuracy
-		if (!qList[i].result) {likelihood=1-likelihood}
-		prob=prob*likelihood/(prob*likelihood+(1-prob)*(1-likelihood))
+function pFalseSuspicion(q,chartUI){ // the probability of having "true" even if innocent, takes previous q into account, takes all-true scenario into account.
+	function notNatural(priors,iq,iTrue){
+		var ratio=P_FALSELY/(1-P_FALSELY)/NUM_CATEGORIES
+		var pOneFalse=0
+		for (var falseOne=0;falseOne<priors.length;falseOne++){
+			var netP=1
+			if (falseOne==iq || falseOne==iTrue) {
+				netP=0
+			} else {
+				for (var i=0;i<priors.length;i++){
+					if (i===falseOne){
+						netP*=(1-priors[i])
+					} else {
+						netP*=priors[i]
+					}
+				}
+			}
+			pOneFalse+=netP
+		}
+		var numerator=pOneFalse/(1+ratio)
+
+		var pTwoFalse=0
+		for (var falseOne=0;falseOne<priors.length;falseOne++){
+			var netP=1
+			if (falseOne==iq || falseOne==iTrue) {
+				netP=0
+			} else {
+				for (var i=0;i<priors.length;i++){
+					if (i===falseOne || i===iq ){
+						netP*=(1-priors[i])
+					} else {
+						netP*=priors[i]
+					}
+				}
+			}
+			pTwoFalse+=netP
+		}
+		return numerator/(pOneFalse+pTwoFalse)
 	}
-	return prob
+	function simple(q,box){
+		var prob=P_FALSELY
+		var qList=box.prevQ
+		for (var i=0;i<qList.length;i++){
+			var likelihood=qList[i].accuracy
+			if (!qList[i].result) {likelihood=1-likelihood}
+			prob=prob*likelihood/(prob*likelihood+(1-prob)*(1-likelihood))
+		}
+		return prob
+	}
+	function singleQ(priors, q, chartUI) {
+		var newProbArray=[]
+		for (var i=0;i<NUM_CATEGORIES; i++) {
+			if (i===q.category) {
+				var likelihood=q.accuracy
+				if (!q.result) {likelihood=1-likelihood}
+				newProbArray.push(priors[i]*likelihood/(priors[i]*likelihood+(1-priors[i])*(1-likelihood)))
+				console.log("first",newProbArray)
+			} else {
+				var pZeroFalse=1
+				for (var j=0; j<NUM_CATEGORIES; j++) {
+					if (j!==i && j!==q.category) {pZeroFalse*=priors[j]}
+				}
+				var pOneFalse=0
+				for (var j=0; j<NUM_CATEGORIES; j++) {
+					if (j!==i && j!==q.category) {pOneFalse+=pZeroFalse/priors[j]*(1-priors[j])}
+				}
+				var pRest=1-pZeroFalse-pOneFalse
+				console.log("p0123",pZeroFalse,pOneFalse,pRest)
+				var box=chartUI[q.suspect][q.category]
+				var pUnnatural=1/NUM_CATEGORIES*Math.pow(P_FALSELY,NUM_CATEGORIES) / (1/NUM_CATEGORIES*Math.pow(P_FALSELY,NUM_CATEGORIES)+P_FALSELY*Math.pow(1-P_FALSELY,NUM_CATEGORIES-1)+Math.pow(P_FALSELY,2)*Math.pow((1-P_FALSELY),NUM_CATEGORIES-2))
+				var likelihoodT=pZeroFalse*0+pRest*simple(q,box)+pOneFalse*(pUnnatural*1+(1-pUnnatural)*simple(q,box))
+				var qAccuracy=q.accuracy
+				if (!q.result) {qAccuracy=1-qAccuracy}
+				likelihoodT=qAccuracy*likelihoodT+(1-qAccuracy)*(1-likelihoodT)
+				//console.log("simple",simple(q,chartUI[q.suspect][q.category]), pUnnatural)
+				var likelihoodF=(qAccuracy*priors[q.category]+(1-qAccuracy)*(1-priors[q.category])-priors[i]*likelihoodT)/(1-priors[i])
+
+				if (priors[i]===1) {likelihoodF=0}
+				newProbArray.push(priors[i]*likelihoodT/(priors[i]*likelihoodT+(1-priors[i])*likelihoodF))
+				console.log("i, likeliT, likeliF, ~n",i,likelihoodT,likelihoodF,pUnnatural)
+			}
+		}
+		return newProbArray
+	}
+	var probArray=[]
+	for (var i=0;i<NUM_CATEGORIES;i++) {
+		probArray.push(P_FALSELY-Math.pow(P_FALSELY,NUM_CATEGORIES)/NUM_CATEGORIES)
+	}	
+	console.log(probArray)
+	for (var i=0;i<NUM_CATEGORIES; i++) {
+		var qList=chartUI[q.suspect][i].prevQ
+		for (var j=0; j<qList.length; j++) {
+			probArray=singleQ(probArray,qList[j],chartUI)
+		}
+	}
+	console.log("probArray",probArray)
+	return probArray[q.category]
 }
-	
+
 /*	
 var falseSusp=0 //testing pFalseSuspicion(n,p)
 for (var i=0;i<1000;i++){
@@ -389,7 +477,7 @@ function makePBars(pDist,width,x,y){ //array of array of divs
 		div.style.borderWidth="1px"
 		POSTBODY.appendChild(div)
 		pBars.push([div])
-		console.log("bottomCoord",div.bottomCoord)
+		//console.log("bottomCoord",div.bottomCoord)
 	}
 	pBars.reset=function(newDist){
 		for (var i=0;i<pBars.length;i++){
@@ -412,7 +500,7 @@ function makePBars(pDist,width,x,y){ //array of array of divs
 				$(toDelete).remove()
 			}
 			///////
-			console.log("to be top:",pBars[i][0].bottomCoord, pBars[i][0],pBars[i][0].style)
+			//console.log("to be top:",pBars[i][0].bottomCoord, pBars[i][0],pBars[i][0].style)
 			////////
 			$(pBars[i][0]).finish()
 			$(pBars[i][0]).animate({
@@ -515,13 +603,13 @@ function makePortraits(n,width,x,y){
 		}
 		var face={face:blankFace,expression:overlay,id:id}
 		portraits.push(face)
-		console.log(blankFace.style.top,blankFace.style.left)
+		//console.log(blankFace.style.top,blankFace.style.left)
 	}
 	portraits.changeExpression=function(suspect,expressionArray){
 		if (expressionArray===undefined || expressionArray.length===0){
 			var choices=["happy.png","sad.png","pained.png","flustered.png","surprised.png","angry.png","relieved.png","calm.png","alert.png"]
 			portraits[suspect].expression.src=choices[Math.floor(Math.random()*expressions.length)]
-			console.log("expression?",face.expression.src,face.face.src)
+			//console.log("expression?",face.expression.src,face.face.src)
 		} else {
 			portraits[suspect].expression.src=expressionArray[Math.floor(Math.random()*expressionArray.length)]
 		}

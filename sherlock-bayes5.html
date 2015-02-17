@@ -120,7 +120,7 @@ function makeChartUI(chartIn,categories, width,height,x,y){
 							"Motives Cost a variable amount of resources (for now, change later)", 
 							"Looking into the suspect's alibi gives the usual results - normal accuracy, normal costs.", 
 							"We can interview character witnesses, but we're likely to get low accuracies. Fortunately, this type of investigation doesn't cost much resources.",
-							"Witnesses are highly variable in quality. Our results may have a very high or a very low accuracy."]
+							"Witnesses are highly variable in quality. The results of our investigation may have a very high or a very low accuracy."]
 						bubbleText=hintText[this.category]
 						if (Math.random()<0.3) {
 							bubbleText+="<br/>Click on the box to investigate!"
@@ -173,7 +173,7 @@ function makeSpan(q,i,width,height) {
 	//text.style.fontWeight="bold"
 	text.style.left=Math.floor(index[i%9]/3)*width+width*0.08+"px"
 	text.style.top=index[i%9]%3*height+"px"
-	console.log(i,index,text.style.left,text.style.top,width,height)
+	//console.log(i,index,text.style.left,text.style.top,width,height)
 	return text
 }
 
@@ -220,6 +220,8 @@ function processClick(suspect,category){
 	for (var i=0;i<post.length;i++){
 		pDist[i]=post[i]
 	}
+
+	// erase for the sake of statistics testing
 	pBars.update(pDist)
 	pDistReport.update(pDist)
 	
@@ -247,6 +249,7 @@ function processClick(suspect,category){
 	//resources, reporting
 	gameState.resources-=cost
 	gameStateUI.update(gameState)
+	//*/
 
 }
 
@@ -262,7 +265,7 @@ function reveal(chart,chartUI){
 	}
 }
 
-/*/statistics testing
+/*//statistics testing
 function getMax(array){
 	var max=array[0]
 	var maxI=0
@@ -277,11 +280,33 @@ function getMax(array){
 var total=10000
 var right=0
 var pSum=0
+var NUM_CATEGORIES=5
+var P_FALSELY=1/3
+
+var pDist=generateDist()
+var chart=makeEvidenceChart(pDist,NUM_CATEGORIES)
+//var suspectName=["Alice","Bob","Carol","Dan"]
+var categoryName=["Forensics", "Motive","Alibi","Character","Witnesses"]
+var boxWidth=99
+var chartUI=makeChartUI(chart,categoryName,boxWidth,54,275,250)
+var priorBoxes=makePriorsBoxes(pDist,boxWidth,275,525)
+var pBars=makePBars(pDist,boxWidth,310,137)
+var pDistReport=makePDistReport(pDist,boxWidth,305,141)
+var portraits=makePortraits(4,boxWidth,295,185)
+var sherlockBayesPortrait=makeSherlockBayes(55,240)
+var speechBubble=makeDetectiveBubble("Hello. I'm Sherlock Bayes. Are you a logical thinker? Then help me solve a gruesome murder mystery.</br></br>",[],260,225,4,4)
+var suspectBubble=makeSuspectBubble("I didn't do it!", 0, boxWidth,370,14,290,160)
+var gameState=makeGameState()
+var gameStateUI=makeGameStateUI(gameState,12,460)
+gameState.difficulty=1
+
 for (var i=0;i<total;i++){
-	while (pDist[getMax(pDist)]<0.50) {
+	var j=0
+	while (j<6){//pDist[getMax(pDist)]<0.90) {
 		var x=Math.floor(Math.random()*4)
 		var y=Math.floor(Math.random()*5)
 		processClick(x,y,chart,chartUI,pDist)
+		j++
 	}
 	var accuse=getMax(pDist)
 	var pVal=pDist[getMax(pDist)]
@@ -289,23 +314,122 @@ for (var i=0;i<total;i++){
 	pSum+=pVal
 	pDist=generateDist()
 	chart=makeEvidenceChart(pDist,NUM_CATEGORIES)
-	chartUI=makeChartUI(chart)
+	chartUI=makeChartUI(chart,categoryName,boxWidth,54,275,250)
 
 }
 console.log("theory:",pSum/total," experiment:",right/total)
 //*/
 
-function pFalseSuspicion(q,chartUI){ // the probability of having "true" even if innocent, takes previous q into account
-	var prob=P_FALSELY-Math.pow(P_FALSELY,NUM_CATEGORIES)/NUM_CATEGORIES
-	var qList=chartUI[q.suspect][q.category].prevQ
-	for (var i=0;i<qList.length;i++){
-		var likelihood=qList[i].accuracy
-		if (!qList[i].result) {likelihood=1-likelihood}
-		prob=prob*likelihood/(prob*likelihood+(1-prob)*(1-likelihood))
-	}
-	return prob
-}
+function pFalseSuspicion(suspect,chartUI){ // the probability of having "true" even if innocent, takes previous q into account, takes all-true scenario into account.
 	
+	//prior probs.
+	var pNotN=Math.pow(P_FALSELY,NUM_CATEGORIES) // not normal
+	var priorsNotN=[]
+	for (var i=0;i<NUM_CATEGORIES;i++) {
+		priorsNotN.push((NUM_CATEGORIES-1)/NUM_CATEGORIES)
+	}
+	var pN=1-pNotN //normal
+	var priorsN=[]
+	for (var i=0;i<NUM_CATEGORIES;i++) {
+		priorsN.push(P_FALSELY)
+	}
+
+	function qTrue(q){
+		var pQTrue=q.accuracy
+		if (!q.result) {pQTrue=1-pQTrue}
+		return pQTrue
+	}
+
+	function likely(priors, q) { // general
+		return priors[q.category]*qTrue(q)+(1-priors[q.category])*(1-qTrue(q))
+	}
+
+	function updatePriorsNotN(priorsNotN,q) { //simple tested, works. Sometimes gets array of NaN if guilty
+		var probFalse=[]
+		for (var i=0;i<NUM_CATEGORIES;i++) {
+			probFalse.push(1-priorsNotN[i])
+		}
+		function likelyNotN(priors,i,q) { // p(~q|priors, i is false hypothesis)
+			if (q.category===i){
+				return 1-qTrue(q)
+			} else {
+				return qTrue(q)
+			}
+		}
+		function denomNotN(priors,q) {
+			var sum=0
+			for (var i=0;i<NUM_CATEGORIES;i++) {
+				sum+=priors[i]*likelyNotN(priors,i,q)
+			}
+			return sum
+		}
+		var posteriors=[]
+		for (var i=0;i<NUM_CATEGORIES;i++) {
+			var prob=probFalse[i]*likelyNotN(probFalse,i,q)/denomNotN(probFalse,q)
+			if (isNaN(prob)) {prob=1}
+			posteriors.push(1-prob)
+		}
+		return posteriors
+	}
+
+	function updatePriorsN(priorsN,q) { //tested, sometimes gives NaN if guilty
+		var posteriors=[]
+		for (var i=0;i<NUM_CATEGORIES;i++) {
+			if (q.category===i) {
+				var iTrue=priorsN[i]*qTrue(q)/(priorsN[i]*qTrue(q)+(1-priorsN[i])*(1-qTrue(q)))
+			} else {
+				var iTrue=priorsN[i]
+			}
+			posteriors.push(iTrue)
+		}
+		return posteriors
+	}
+
+	function trimPriorsN(priorsN) { //tested, sometimes gives NaN if guilty
+		var allTrue=1
+		for (var i=0;i<NUM_CATEGORIES;i++) {
+			allTrue*=priorsN[i]
+		}
+		pFinal=[]
+		for (var i=0;i<NUM_CATEGORIES;i++) {
+			pFinal.push((priorsN[i]-allTrue)/(1-allTrue))
+		}
+		return pFinal
+	}
+
+	function calcLikely_Q(priorsN, priorsNotN, pN, pNotN, q) {
+		var pQ_NotN=likely(priorsNotN,q)
+		var pQ_N=likely(priorsN,q)
+
+		var output={}
+		output.priorsNotN=updatePriorsNotN(priorsNotN,q)
+		output.priorsN=updatePriorsN(priorsN,q)
+		output.pNotN=pQ_NotN*pNotN/(pQ_NotN*pNotN+pQ_N*pN) //pNotN needs to persist, as part of priors
+		output.pN=pQ_N*pN/(pQ_NotN*pNotN+pQ_N*pN) //pN needs to persist, as part of priors
+
+		var likelihood=[]
+		for (var i=0;i<NUM_CATEGORIES;i++) {
+			likelihood.push(trimPriorsN(output.priorsN)[i]*output.pN+output.priorsNotN[i]*output.pNotN)
+		}
+		output.likelihood=likelihood //likelihood need not persist.
+		return output
+	}
+
+	var initialL=[]
+	for (var i=0;i<NUM_CATEGORIES;i++) {
+		initialL.push(trimPriorsN(priorsN)[i]*pN+priorsNotN[i]*pNotN)
+	}
+	var stats={priorsNotN:priorsNotN, priorsN:priorsN, pN:pN, pNotN:pNotN, likelihood:initialL}
+	for (var i=0;i<NUM_CATEGORIES; i++) {
+		var qList=chartUI[suspect][i].prevQ
+		for (var j=0; j<qList.length; j++) {
+			stats=calcLikely_Q(stats.priorsN, stats.priorsNotN, stats.pN, stats.pNotN, qList[j])
+		}
+	}
+	//console.log("pFalseSuspicion",stats)
+	return stats.likelihood
+}
+
 /*	
 var falseSusp=0 //testing pFalseSuspicion(n,p)
 for (var i=0;i<1000;i++){
@@ -318,60 +442,52 @@ for (var i=0;i<1000;i++){
 console.log("exp:", falseSusp/1000, "theory: ",pFalseSuspicion({result:true,suspect:1,category:0,accuracy:1},chartUI))
 */
 
-function likelihood(q,suspect,chartUI) { //P(qResult for qSuspect|suspect)
-	if (suspect===q.suspect) {
-		if (q.result){return q.accuracy}
-		else {return 1-q.accuracy}
-	} else {
-		var pFalsely=pFalseSuspicion(q,chartUI)
-		var pTrue=pFalsely*q.accuracy+(1-pFalsely)*(1-q.accuracy)
-		if (q.result){return pTrue}
-		else {return 1-pTrue}
+function likelihood(q,numSuspects,unluckyTrueTable) { //P(qResult for qSuspect|suspect)
+	var output=[]
+	for (var i=0;i<numSuspects;i++) {
+		if (i===q.suspect) {
+			if (q.result) {output.push(q.accuracy)}
+			else {output.push(1-q.accuracy)}	
+		} else {
+			var likelihood=unluckyTrueTable[q.category]
+			likelihood=likelihood*q.accuracy+(1-likelihood)*(1-q.accuracy)
+			if (!q.result) {likelihood=1-likelihood}
+			output.push(likelihood)
+		}
 	}
-} //console.log(likelihood(true,1,0.9,0))
+	return output
+}
 
-function denominator(q,priors,chartUI){ //P(result)
+function denominator(priors,likelihoodTable){ //P(result)
 	var prob=0
-	for (var i=0;i<priors.length;i++){
-		prob+=priors[i]*likelihood(q,i,chartUI)
+	for (var suspect=0;suspect<priors.length;suspect++){
+		prob+=priors[suspect]*likelihoodTable[suspect]
 	}
 	return prob
 }
 
 function bayesTheorem(q,priors,chartUI){
 	var posteriors=[]
-	var denom=denominator(q,priors,chartUI)
-	for (var i=0;i<priors.length;i++){
-		var prob=priors[i]*likelihood(q,i,chartUI)/denom
+	var numSuspects=priors.length
+	var unluckyTrueTable=pFalseSuspicion(q.suspect,chartUI) // based on prevQ
+	var likelihoodTable=likelihood(q,numSuspects,unluckyTrueTable)
+	var denom=denominator(priors,likelihoodTable)
+	//console.log("suspects",likelihoodTable)
+	for (var suspect=0;suspect<priors.length;suspect++){
+		var prob
+		if (priors[suspect]===1) {
+			prob=1
+		} else if (priors[suspect]===0) {
+			prob=0
+		} else {
+			prob=priors[suspect]*likelihoodTable[suspect]/denom
+		}
 		posteriors.push(prob)
 	}
 	chartUI[q.suspect][q.category].prevQ.push(q)
 	return posteriors
 }
 //q={result:,suspect, category, accuracy}
-//bayes theorem mechanics test
-/*
-var p1=bayesTheorem({result:true,suspect:1,category:1,accuracy:0.8},[0.25,0.25,0.25,0.25],chartUI)
-console.log(p1)
-p1=bayesTheorem({result:true,suspect:1,category:2,accuracy:0.8},p1,chartUI)
-console.log(p1)
-p1=bayesTheorem({result:true,suspect:1,category:3,accuracy:0.8},p1,chartUI)
-console.log(p1)
-p1=bayesTheorem({result:true,suspect:1,category:0,accuracy:0.8},p1,chartUI)
-console.log(p1)
-p1=bayesTheorem({result:true,suspect:1,category:1,accuracy:0.8},p1,chartUI)
-console.log(p1)
-p1=bayesTheorem({result:true,suspect:1,category:2,accuracy:0.8},p1,chartUI)
-console.log(p1)
-p1=bayesTheorem({result:true,suspect:1,category:3,accuracy:0.8},p1,chartUI)
-console.log(p1)
-p1=bayesTheorem({result:true,suspect:1,category:0,accuracy:0.8},p1,chartUI)
-console.log(p1)
-p1=bayesTheorem({result:true,suspect:1,category:1,accuracy:0.8},p1,chartUI)
-console.log(p1)
-
-console.log(chartUI)
-*/
 
 function makePBars(pDist,width,x,y){ //array of array of divs
 	var pBars=[]
@@ -389,7 +505,7 @@ function makePBars(pDist,width,x,y){ //array of array of divs
 		div.style.borderWidth="1px"
 		POSTBODY.appendChild(div)
 		pBars.push([div])
-		console.log("bottomCoord",div.bottomCoord)
+		//console.log("bottomCoord",div.bottomCoord)
 	}
 	pBars.reset=function(newDist){
 		for (var i=0;i<pBars.length;i++){
@@ -412,7 +528,7 @@ function makePBars(pDist,width,x,y){ //array of array of divs
 				$(toDelete).remove()
 			}
 			///////
-			console.log("to be top:",pBars[i][0].bottomCoord, pBars[i][0],pBars[i][0].style)
+			//console.log("to be top:",pBars[i][0].bottomCoord, pBars[i][0],pBars[i][0].style)
 			////////
 			$(pBars[i][0]).finish()
 			$(pBars[i][0]).animate({
@@ -515,13 +631,13 @@ function makePortraits(n,width,x,y){
 		}
 		var face={face:blankFace,expression:overlay,id:id}
 		portraits.push(face)
-		console.log(blankFace.style.top,blankFace.style.left)
+		//console.log(blankFace.style.top,blankFace.style.left)
 	}
 	portraits.changeExpression=function(suspect,expressionArray){
 		if (expressionArray===undefined || expressionArray.length===0){
 			var choices=["happy.png","sad.png","pained.png","flustered.png","surprised.png","angry.png","relieved.png","calm.png","alert.png"]
 			portraits[suspect].expression.src=choices[Math.floor(Math.random()*expressions.length)]
-			console.log("expression?",face.expression.src,face.face.src)
+			//console.log("expression?",face.expression.src,face.face.src)
 		} else {
 			portraits[suspect].expression.src=expressionArray[Math.floor(Math.random()*expressionArray.length)]
 		}
@@ -538,9 +654,9 @@ function accuse(portrait){
 	//console.log(parseInt(portrait.src.charAt(portrait.src.length-5))===chart.culprit,parseInt(portrait.src.charAt(portrait.src.length-5)),chart.culprit)
 	var bubbleText
 	if (suspect===chart.culprit) {
-		bubbleText="YES!!! We got the culprit! Justice is served! </br>(Your score will increase by the reward amount, plus the amount of resources you have remaining.) Click on the button below to start on a new case."
+		bubbleText="YES!!! We caught the murderer! Justice is served! </br></br>Your score will increase by the reward amount. In addition, your remaining resources will be added to your score. Click on the button below to start on a new case."
 	} else {
-		bubbleText="NOOOOO!!! We falsely accused an innocent person! Woe is us! </br>(Your score will decrease by the penalty amount, plus the amount of resources you have remaining.) Click on the button below to start on a new case."
+		bubbleText="NOOOOO!!! We falsely accused an innocent person! Woe is us! </br></br>Your score will decrease by the penalty amount. In addition, your remaining resources will be added to your score. Click on the button below to start on a new case."
 	}
 	speechBubble.update(bubbleText,["New case","reset"])
 	gameState.endCase(suspect===chart.culprit) 
@@ -802,11 +918,11 @@ function makeGameStateUI(gameState,x,y) {
 function suspectsText(situation, speaker) { // 0-3 for suspects, undefined for any suspect
 	var thingsToSay
 	if (situation==="preAccuse") {
-		thingsToSay=["I'M INNOCENT!", "IT WASN'T ME!","YOU'VE GOT THE WRONG PERSON!","DON'T YOU DARE!", "I DIDN'T DO IT!", "YOU'LL REGRET THIS!", "YOU'RE ACCUSING ME OF MURDER?!", "YOU CAN'T BE SERIOUS!", "THIS IS RIDICULOUS!"]
+		thingsToSay=["I'M INNOCENT!", "IT WASN'T ME!","YOU'VE GOT THE WRONG PERSON!","DON'T YOU DARE!", "I DIDN'T DO IT!", "YOU'LL REGRET THIS!", "YOU'RE ACCUSING ME OF MURDER?!", "YOU CAN'T BE SERIOUS!", "THIS IS RIDICULOUS!", "YOU HAVE NO PROOF!"]
 	} else if (situation==="accuse") {
 		thingsToSay=["NOOOOO!!!"]
 	} else if (situation==="investigate") {
-		thingsToSay=["You're barking up the wrong tree.", "Why don't you go bother someone else?", "I have an explanation for all this.", "Don't you have real criminals to stop?", "But how can you be sure?", "This is stupid.", "This doesn't prove anything.", "You don't think I'm guilty, do you?", "Psst. I think it was the person next to me.", "Leave me alone!", "You're ruining my life!", "This is so unfair.", "I'm being oppressed!", "I'm gonna sue you!", "Sigh...", "Hmph.", "I'm a good person!"]
+		thingsToSay=["You're barking up the wrong tree.", "Why don't you go bother someone else?", "I can explain all this.", "Don't you have real criminals to stop?", "But how can you be sure?", "This is stupid.", "This doesn't prove anything.", "You don't think I'm guilty, do you?", "Psst. I think it was the person next to me.", "Leave me alone!", "You're ruining my life!", "This is so unfair.", "I'm being oppressed!", "I'm gonna sue you!", "Sigh...", "Hmph.", "I'm a good person!", "I could never kill anyone", "I hope you catch whoever did it.", "I'm a nice person. Ask my friends."]
 	}
 	return thingsToSay[Math.floor(Math.random()*thingsToSay.length)]
 }
