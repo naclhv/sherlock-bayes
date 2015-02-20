@@ -16,6 +16,8 @@ cheaper cost for random
 difficulty levels
 pictures,reactions, tutorial, ui, etc.
 
+on final click, no fuzzing.
+
 things:
 next post: no difficulty, but other settings - reactions, resources, score, etc.
 from v.5
@@ -148,6 +150,7 @@ function makeChartUI(chartIn,categories, width,height,x,y){
 		for (var i=0;i<newChart.length;i++) {
 			for (var j=0;j<newChart[0].length;j++) {
 				var div=chartUI[i][j]
+				div.style.outline=""
 				if (i%2===0){
 					div.style.backgroundColor="khaki"//rgb(250,250,100)"
 				} else{
@@ -172,6 +175,7 @@ function makeSpan(q,i,width,height) {
 		text.style.color="darkgreen"
 	}
 	text.style.position="absolute"
+	//text.style.textShadow="0px 0px 8px #303030"
 	//text.style.backgroundColor="yellow"
 	if (text.innerHTML.length>3) {text.style.fontSize="12px"} else {text.style.fontSize="14px"}
 	//text.style.fontWeight="bold"
@@ -181,13 +185,35 @@ function makeSpan(q,i,width,height) {
 	return text
 }
 
+function fuzz(thing,difficulty) {
+	if (typeof thing[0]==="undefined" && (difficulty===3 || difficulty===4)) { // so it's q
+		var newQ={}
+		for (var prop in thing) {
+			newQ[prop]=thing[prop]
+		}
+		newQ.accuracy=Math.round(newQ.accuracy*20)/20 //5% precision
+		return newQ
+	} else if (typeof thing[0]==="number" && difficulty===-1) { // it's pDist. This will never kick in for now because of difficulty =-1
+		var newDist=[]
+		for (var i=0;i<thing.length;i++) {
+			newDist[i]=Math.round((thing[i]+Math.random()*0.099)*10)/10
+			if (newDist[i]>1){newDist[i]=1}
+			if (newDist[i]<0){newDist[i]=0}
+		}
+		return newDist
+	} else {
+		return thing
+	}
+
+}
+//console.log(fuzz([0.234,0.2355,0.8734,0.56],3))
+
 function processClick(suspect,category){
-	//console.log("before",pDist)
 	var cost=8
 	var acccuracy
 	switch (category) {
 		case 0:
-			accuracy=0.85+0.15*2*(Math.random()-0.5)
+			accuracy=0.83+0.15*2*(Math.random()-0.5)
 			cost+=4
 			//fingerprints: high accuracy, high cost
 			break
@@ -202,7 +228,7 @@ function processClick(suspect,category){
 			//alibi: standard cost and accuracy
 			break
 		case 3:
-			accuracy=0.65+0.15*2*(Math.random()-0.5)
+			accuracy=0.67+0.15*2*(Math.random()-0.5)
 			cost-=4
 			//character witnesses: low accuracy, low cost
 			break
@@ -213,6 +239,10 @@ function processClick(suspect,category){
 			break
 	}
 	if (gameState.difficulty===1) {accuracy=1}
+	var costReductionRate=0.2*Math.sqrt(chartUI[suspect][category].prevQ.length)
+	costReductionRate=Math.min(costReductionRate,0.75)
+	cost=Math.round(cost*(1-costReductionRate))
+	console.log(cost)
 	//if (Math.random()<0.5) {accuracy=1}
 	//accuracy=1
 	//console.log(cost)
@@ -224,10 +254,21 @@ function processClick(suspect,category){
 	for (var i=0;i<post.length;i++){
 		pDist[i]=post[i]
 	}
+	//console.log("q?", q[1]===undefined, pDist[1]===undefined, typeof asdfaf, typeof q[1]==="undefined", typeof pDist[1])
 
-	// erase for the sake of statistics testing
-	pBars.update(pDist)
-	pDistReport.update(pDist)
+
+	///* comment this part out when statistics testing
+
+	//display bars and pDist
+	if (gameState.difficulty===3) {
+		if (Math.random()<cost*2.5/100) { //mostly conceals
+			qMarks.hide()
+		} else {
+			qMarks.show()
+		}
+	}
+	pBars.update(fuzz(pDist,gameState.difficulty))
+	pDistReport.update(fuzz(pDist,gameState.difficulty))
 	
 	//report query
 	var box=chartUI[suspect][category]
@@ -235,7 +276,7 @@ function processClick(suspect,category){
 	//if (box.prevQ.length>9) {box.prevQ.shift()}
 	for (var i=box.prevQ.length-1;i>=0;i--){
 		if (i===box.prevQ.length-10){break}
-		var reportQ=makeSpan(box.prevQ[i],i,parseInt(box.style.width)/3,parseInt(box.style.height)/3)
+		var reportQ=makeSpan(fuzz(box.prevQ[i],gameState.difficulty),i,parseInt(box.style.width)/3,parseInt(box.style.height)/3)
 		box.appendChild(reportQ)
 		if (i===box.prevQ.length-1) {
 			$(reportQ).animate({fontSize:"+=4", left:"-=2"},"fast").animate({fontSize:"-=4",left:"+=2"},"fast")
@@ -243,7 +284,9 @@ function processClick(suspect,category){
 	}
 
 	//suspects react
-	suspectBubble.fadeIn(suspectsText("investigate"),suspect)
+	if (Math.random()<0.8) {
+		suspectBubble.fadeIn(suspectsText("investigate"),suspect)
+	}
 	chartUI[suspect][category].onmouseleave=function(){
 		suspectBubble.fadeOut()
 		chartUI[suspect][category].onmouseleave=function(){}
@@ -265,6 +308,9 @@ function reveal(chart,chartUI){
 			} else {
 				chartUI[i][j].style.backgroundColor="lightgreen"
 			}
+			if (i===chart.culprit) {
+				chartUI[i][j].style.outline="red solid thin"
+			}
 		}
 	}
 }
@@ -285,7 +331,7 @@ var total=10000
 var right=0
 var pSum=0
 var NUM_CATEGORIES=5
-var P_FALSELY=1/3
+var P_FALSELY=0.5
 
 var pDist=generateDist()
 var chart=makeEvidenceChart(pDist,NUM_CATEGORIES)
@@ -302,11 +348,11 @@ var speechBubble=makeDetectiveBubble("Hello. I'm Sherlock Bayes. Are you a logic
 var suspectBubble=makeSuspectBubble("I didn't do it!", 0, boxWidth,370,14,290,160)
 var gameState=makeGameState()
 var gameStateUI=makeGameStateUI(gameState,12,460)
-gameState.difficulty=1
+gameState.difficulty=2
 
 for (var i=0;i<total;i++){
 	var j=0
-	while (j<6){//pDist[getMax(pDist)]<0.90) {
+	while (j<30){//pDist[getMax(pDist)]<0.90) {
 		var x=Math.floor(Math.random()*4)
 		var y=Math.floor(Math.random()*5)
 		processClick(x,y,chart,chartUI,pDist)
@@ -581,6 +627,7 @@ function makePDistReport(pDist,width,x,y){
 			}
 			pDistReport[i].push($(pDistReport[i][0]).clone()[0])
 			POSTBODY.appendChild(pDistReport[i][1])
+			$(pDistReport[i][1]).finish()
 			$(pDistReport[i][1]).animate({
 				left:"+=49", 
 				opacity:"-=0.3",
@@ -588,10 +635,41 @@ function makePDistReport(pDist,width,x,y){
 				top:"+=1"
 			},"fast")//,function(){pDistReport[i][1].innerHTML="<-"+pDistReport[i][1].innerHTML})
 			pDistReport[i][0].innerHTML=Math.round(pDist[i]*1000)/10+"%"
+			$(pDistReport[i][0]).finish()
 			$(pDistReport[i][0]).animate({fontSize:"+=3"},"fast").animate({fontSize:"-=3"},"fast")
 		}
 	}
 	return pDistReport
+}
+
+function makeQuestionMarks(n,width,x,y) {
+	var questionMarks=[]
+	for (var i=0;i<n;i++) {
+		var img=document.createElement("IMG")
+		POSTBODY.appendChild(img)
+		img.style.position="absolute"
+		img.style.top=y+"px"
+		img.style.left=i*parseInt(width)+x+"px"
+		img.style.zIndex=1
+		img.src="questionmark.png"
+		questionMarks.push(img)
+	}
+	questionMarks.hide=function(){
+		for (var i=0;i<questionMarks.length;i++) {
+			questionMarks[i].style.visibility="hidden"
+		}
+	}
+	questionMarks.show=function(){
+		for (var i=0;i<questionMarks.length;i++) {
+			questionMarks[i].style.visibility="visible"
+		}
+	}
+	questionMarks.alpha=function(alpha){
+		for (var i=0;i<questionMarks.length;i++) {
+			questionMarks[i].style.opacity=alpha
+		}
+	}
+	return questionMarks
 }
 
 function makePortraits(n,width,x,y){
@@ -652,6 +730,19 @@ function makePortraits(n,width,x,y){
 function accuse(portrait){
 	var suspect=parseInt(portrait.src.charAt(portrait.src.length-5))
 	reveal(chart,chartUI)
+	qMarks.hide()
+	for (var i=0;i<chartUI.length;i++) {
+		for (var j=0;j<chartUI[i].length;j++) {
+			var box=chartUI[i][j]
+			if (box.prevQ.length>0) {box.innerHTML=""}
+			for (var k=box.prevQ.length-1;k>=0;k--) {
+				if (k===box.prevQ.length-10){break}
+				var reportQ=makeSpan(box.prevQ[k],k,parseInt(box.style.width)/3,parseInt(box.style.height)/3)
+				box.appendChild(reportQ)
+			}
+		}
+	}
+	clearInterval(gameState.status.bleedResources)
 	gameState.status.caseOver=true
 	suspectBubble.fadeIn(suspectsText("accuse"),suspect)
 	portraits.changeExpression(suspect,["pained.png"])
@@ -719,6 +810,7 @@ function makeDetectiveBubble(text,buttonArray,width,height,x,y){
 	buttonDiv.style.backgroundColor="white"
 	buttonDiv.style.borderRadius=3+"px"
 	buttonDiv.style.padding=3+"px"
+	//buttonDiv.style.backgroundColor="yellow"
 	//buttonDiv.style.border="solid 2px"
 	
 	for (var i=0;i<buttonArray.length;i++){
@@ -729,6 +821,7 @@ function makeDetectiveBubble(text,buttonArray,width,height,x,y){
 			processButton(this.innerHTML)
 		}
 		buttonDiv.appendChild(button)
+		button.style.cssFloat="right"
 	}
 
 	POSTBODY.appendChild(div)
@@ -746,6 +839,7 @@ function makeDetectiveBubble(text,buttonArray,width,height,x,y){
 				processButton(this.innerHTML)
 			}
 			buttonDiv.appendChild(button)
+			button.style.cssFloat="right"
 		}
 	}
 	return bubble
@@ -821,6 +915,22 @@ function processButton(buttonName){
 		}
 		pDist=generateDist()
 		if (gameState.difficulty===1) {pDist=[0.25,0.25,0.25,0.25]}
+		if (gameState.difficulty===3) {
+			qMarks.show()
+		} else if (gameState.difficulty===4) {
+			qMarks.show()
+			//qMarks.alpha(1)
+		}
+		else {
+			qMarks.hide()
+		}
+		clearInterval(gameState.status.bleedResources)
+		if (gameState.difficulty===4) {
+			gameState.status.bleedResources=setInterval(function(){
+				gameState.resources--
+				gameStateUI.update(gameState)
+			},5000)
+		}
 		chart=makeEvidenceChart(pDist,NUM_CATEGORIES)
 		chartUI.reset(chart)
 		pBars.reset(pDist)
@@ -830,6 +940,8 @@ function processButton(buttonName){
 		gameStateUI.update(gameState)
 
 		speechBubble.update("Welcome to a new case, this is a big or a small one, look at the reward/penalties, Start investigating!",[])
+	} else if (gameState.difficulty===0 && (buttonName==="circle" || buttonName==="Next")) {
+		tutorial()
 	}
 	console.log(buttonName)
 }
@@ -870,8 +982,8 @@ function makeGameState(){
 
 function makeGameStateUI(gameState,x,y) {
 	var selector=document.createElement("SELECT")
-	var difficulties=["Difficulty:Tutorial","Difficulty:Easy","Difficulty:Medium","Difficulty:Hard"]
-	for (var i=0;i<4;i++){
+	var difficulties=["Difficulty:Tutorial","Difficulty:Easy","Difficulty:Normal","Difficulty:Hard","Difficulty:Very Hard"]
+	for (var i=0;i<5;i++){
 		var option=new Option(difficulties[i],i)//document.createElement("OPTION")
 		//option.text=difficulties[i]
 		selector.add(option)
@@ -883,12 +995,12 @@ function makeGameStateUI(gameState,x,y) {
 
 	//selector.style.position="absolute"
 	//selector.style.top=3
-	var text="Resources:"+gameState.resources+"</BR>"+
+
+	var text="Case #"+gameState.caseNumber+"</BR>"+"Resources:"+gameState.resources+"</BR>"+
 	"Certainty Goal:"+Math.round(gameState.pGoal*100)+"%"+"</BR>"+
 	"Reward:"+gameState.reward+"</BR>"+
 	"Penalty:"+gameState.penalty+"</BR>"+
-	"Score:"+gameState.score+"</BR>"+
-	"Case #:"+gameState.caseNumber
+	"Score:"+gameState.score
 	var textDiv=document.createElement("DIV")
 	textDiv.innerHTML=text
 	var div=document.createElement("DIV")
@@ -907,12 +1019,12 @@ function makeGameStateUI(gameState,x,y) {
 	gameStateUI={div:div,selector:selector,textDiv:textDiv,
 		update:function(gameState){
 			gameStateUI.selector.selectedIndex=gameState.difficulty
-			var text="Resources:"+gameState.resources+"</BR>"+
+			var text="Case #"+gameState.caseNumber+"</BR>"+
+			"Resources:"+gameState.resources+"</BR>"+
 			"Certainty Goal:"+Math.round(gameState.pGoal*100)+"%"+"</BR>"+
 			"Reward:"+gameState.reward+"</BR>"+
 			"Penalty:"+gameState.penalty+"</BR>"+
-			"Score:"+gameState.score+"</BR>"+
-			"Case #:"+gameState.caseNumber
+			"Score:"+gameState.score
 			gameStateUI.textDiv.innerHTML=text
 		}
 	}
@@ -937,12 +1049,229 @@ function reset(difficulty){
 	}
 	gameState.caseNumber=0 //because New case adds 1.
 	gameState.score=0
+	clearInterval(gameState.status.bleedResources)
 	gameState.status={}
 	processButton("New case")
-	if (difficulty===1) {
-		speechBubble.update("On the 'Easy' difficulty, investigations are always 100% accurate. We're only using propositional logic, which is just a simplified version of Bayesian logic. Furthermore, all suspects are equally likely to have committed the crime from the beginning. <br/>Click on a box to investigate!",[])
-		reveal(chart,chartUI) //debugging
+	switch (difficulty) {
+		case 0:
+			tutorial()
+			break
+		case 1:
+			speechBubble.update("On the 'Easy' difficulty, investigations are always 100% accurate. Furthermore, all suspects are equally likely to have committed the crime from the beginning. <br/>Click on a box to investigate!",[])
+			break
+		case 2:
+			speechBubble.update("On the 'Normal' difficulty, investigations generally have less than 100% accuracy. Furthermore, each suspect starts with a different prior probability of having commited the crime. <br/>Click on a box to investigate!",[])
+			break
+		case 3:
+			speechBubble.update("On the 'Hard' difficulty, each suspect's current probability of guilt is concealed, but you may see it randomly after an investigation. Furthermore, you don't know the exact accuracy of each investigation, as it's displayed after rounding off to the nearest 5%.<br/>Click on a box to investigate! ",[])
+			break
+		case 4:
+			speechBubble.update("On the 'Very Hard' difficulty, you don't ever get to see the suspect's probabilities until the end of the case. Furthermore, you continuously lose one resource every five seconds.<br/>Click on a box to investigate!",[])
+			break
 	}
+}
+
+function makeCircle(){
+	var img=document.createElement("IMG")
+	POSTBODY.appendChild(img)
+	img.style.position="absolute"
+	img.style.zIndex=1
+	img.style.visibility="hidden"
+	img.src="circle.png"
+	img.move=function(x1,y1,x2,y2) {
+		var width=x2-x1
+		var height=y2-y1
+		img.style.left=x1-width/4+"px"
+		img.style.top=y1-height/4+"px"
+		img.style.width=1.5*width+"px"
+		img.style.height=1.5*height+"px"
+		img.style.visibility="visible"
+		$(img).finish()
+		$(img).animate({
+			left:x1+"px",
+			top:y1+"px",
+			width:width+"px",
+			height:height+"px"
+		},"fast")
+	}
+	img.hide=function() {
+		img.style.visibility="hidden"
+	}
+	img.onclick=function() {
+		processButton("circle")
+	}
+	return img
+}
+
+function tutorial() {
+	if (typeof gameState.status.tutorial==="undefined"){ gameState.status.tutorial=0}
+	switch (gameState.status.tutorial) {
+		case 0:
+			chart[0]=[false,true,false,true,false]
+			chart[1]=[true,true,true,true,true]
+			chart[2]=[false,false,true,false,false]
+			chart[3]=[true,false,true,false,true]
+			chart.culprit=1
+			pDist=[0.35,0.40,0.12,0.13]
+			pBars.reset(pDist)
+			pDistReport.reset(pDist)
+			//reveal(chart,chartUI) //testing
+			gameState.status.caseOver=true
+			speechBubble.update("Our murderer is one of these four suspects.", ["Next","test"])
+			circle.move(270,170, 670,260)
+			circle.onclick=function(){}
+			gameState.status.tutorial++
+			break		
+		case 1:
+			speechBubble.update("We will perform the investigation by clicking on these boxes.", ["Next"])
+			circle.move(265,235, 675,545)
+			gameState.status.tutorial++
+			break
+		case 2:
+			speechBubble.update("Let's investigate Alice's motives. Click on the 'Motive' box under Alice.", [])
+			circle.move(270,300, 380,365)
+			circle.onclick=function(){
+				tutorial()
+				circle.onclick=function(){}
+			}
+			gameState.status.tutorial++
+			break
+		case 3:
+			var q={result:true,suspect:0,category:1,accuracy:1}
+			var post=bayesTheorem(q,pDist,chartUI)
+			for (var i=0;i<post.length;i++){
+				pDist[i]=post[i]
+			}
+			pBars.update(pDist)
+			pDistReport.update(pDist)
+			var box=chartUI[0][1]
+			box.innerHTML=""
+			var reportQ=makeSpan(box.prevQ[0],0,parseInt(box.style.width)/3,parseInt(box.style.height)/3)
+			box.appendChild(reportQ)
+			$(reportQ).animate({fontSize:"+=4", left:"-=2"},"fast").animate({fontSize:"-=4",left:"+=2"},"fast")	
+			suspectBubble.fadeIn(suspectsText("investigate"),0)
+			circle.onmouseleave=function(){
+				suspectBubble.fadeOut()
+				circle.onmouseleave=function(){}
+			}
+			portraits.changeExpression(0)
+			gameState.resources-=8
+			gameStateUI.update(gameState)
+
+			speechBubble.update("The red 100% means that Alice definitely had a motive for commiting the murder. That doesn't necessarily mean she's the culprit, though.", ["Next"])
+			circle.move(270,300, 380,365)
+			gameState.status.tutorial++
+			break
+		case 4:
+			speechBubble.update("Let's now look at the forensic evidence for Alice. Click on the 'Forensics' box under Alice.", [])
+			circle.move(270,245, 380,315)
+			circle.onclick=function(){
+				tutorial()
+				circle.onclick=function(){}
+			}
+			gameState.status.tutorial++
+			break
+
+		case 5:
+			var q={result:true,suspect:0,category:0,accuracy:0.75}
+			var post=bayesTheorem(q,pDist,chartUI)
+			for (var i=0;i<post.length;i++){
+				pDist[i]=post[i]
+			}
+			pBars.update(pDist)
+			pDistReport.update(pDist)
+			var box=chartUI[0][0]
+			box.innerHTML=""
+			var reportQ=makeSpan(box.prevQ[0],0,parseInt(box.style.width)/3,parseInt(box.style.height)/3)
+			box.appendChild(reportQ)
+			$(reportQ).animate({fontSize:"+=4", left:"-=2"},"fast").animate({fontSize:"-=4",left:"+=2"},"fast")	
+			suspectBubble.fadeIn(suspectsText("investigate"),0)
+			circle.onmouseleave=function(){
+				suspectBubble.fadeOut()
+				circle.onmouseleave=function(){}
+			}
+			portraits.changeExpression(0)
+			gameState.resources-=12
+			gameStateUI.update(gameState)
+
+			speechBubble.update("The red 75% means that according to forensics, there is a 75% chance that Alice had contact with the victim around the time of the murder. So there is still a 25% chance that she had NO contact with the victim, in which case she'd be innocent. Also, even if she did really have contact, that doesn't necessarily mean she's guilty.", ["Next"])
+			circle.move(270,245, 380,315)
+			gameState.status.tutorial++
+			break
+		case 6:
+			speechBubble.update("Let's next look at the witness evidence concerning Alice. Click on the 'Witnesses' box under Alice.", [])
+			circle.move(270,465, 380,530)
+			circle.onclick=function(){
+				tutorial()
+				circle.onclick=function(){}
+			}
+			gameState.status.tutorial++
+			break
+
+
+		case 7:
+			speechBubble.update("Our murderer is one of these four suspects4", ["Next"])
+			circle.move(270,170, 670,260)
+			gameState.status.tutorial++
+			break
+		case 8:
+			speechBubble.update("Our murderer is one of these four suspects4", ["Next"])
+			circle.move(270,170, 670,260)
+			gameState.status.tutorial++
+			break
+		case 9:
+			speechBubble.update("Our murderer is one of these four suspects4", ["Next"])
+			circle.move(270,170, 670,260)
+			gameState.status.tutorial++
+			break
+		case 4:
+			speechBubble.update("Our murderer is one of these four suspects4", ["Next"])
+			circle.move(270,170, 670,260)
+			gameState.status.tutorial++
+			break
+}
+
+/*
+Our murderer is one of these four suspects. (circle)
+We perform the investigation by clicking on these boxes (circle)
+Let's investigate Alice's motives. Click on the "Motive" box under Alice. (circle, enable click, 100%)
+The red 100% means that Alice definitely had a motive for commiting the murder. That doesn't necessarily mean she's the culprit, though. 
+Let's look at the forensic evidence for Alice. Click on the "Forensics" box under Alice.(circle, click, 75%)
+The red 75% means that according to forensics, there is a 75% chance that Alice had contact with the victim around the time of the murder. That means there is still a 25% chance that she had NO contact with the victim, in which case she'd be innocent. Also, even if she did really have contact, that doesn't necessarily mean she's guilty.
+
+Let's next look at the witness evidence concerning Alice (circle, click, 100% g)
+
+That green 100% means that Alice definitely does NOT match the description of the murderer given by witnesses. Therefore, she absolutely cannot be the culprit. She is innocent.
+
+Notice that her probability of being guilty, up above her head, has now dropped to 0% to reflect her proven innocent. (circle)
+
+This probability of being guilty is calculated from all the evidence we gathered,
+
+Plus the prior probability that we had for the guilt of each suspect. These are the degrees to which you think a suspect might be guilty, BEFORE you gather any evidence for the case. It may reflect, for example, their prior criminal records. (circle)
+
+Looking at the probabilities, we see that Bob now has the highest chance of being guilty. So let's investigate his Alibi. Click on the "Alibi" box under Bob. (circle, click, 90%)
+
+The red 90% means that Bob offered a very weak alibi. There is a 90% chance that he really has no alibi. Again, this doesn't necessarily mean that he's guilty, although of course this increases the chance.
+
+What, then, does actual guilt look like? Here we went ahead and 'cheated', by revealing the truth under each box we're investigating. A red box means that this evidence is compatible with this person being the culprit, whereas a green box means that the evidence is incompatible with the guilt of this suspect, who must then be innocent. (reveal)
+
+So, for example, the forensic evidence actually indicates that Alice had NO contact with the victim, although she had the motive to commit the murder and a personal character capable of killing. Furthermore, she has a bulletproof alibi and does not match the witness descriptions of the murderer. Notice that our particular investigation got it wrong on the forensics: This is not unexpected, as our forensics investigation only had a 75% accuracy and so still had a 25% chance to be wrong. (circle)
+
+Dan, on the other hand, is someone who had contact with the victim, has no alibi, and matches the witness description of the murderer, but he has no motive and a personal character incapable of committing a murder. He is therefore innocent. (circle)
+
+The true culprit is the one whose entire column is red in every box: Bob. He is compatible with all of the evidence. In each murder case, there will only be one suspect whose entire column of boxes will be red, and that person will be the true culprit; all other suspects will have at least one green box which indicates that they could not be the murderer. (circle)
+
+But even these innocent suspects have about a 40% chance for a given box to be red. They were just unlucky in some way - they might have been at the wrong place at the wrong time, like Dan having had contact with the victim despite him being innocent. (circle)
+
+Let's hide the answers again and go back to our case: Looking at the probability of guilt, we see that Bob is very likely to be guilty based on the priors and the evidence we've gathered. (That, and we just 'cheated' and know that he's the culprit.) So let's accuse him as the murderer. Click on his portrait to make the accusation. (circle, click)
+
+That ends our tutorial murder case. After each case, you get points based on whether you accused the right person, and how much resources you have remaining. (Resources are used each time you investigate a box.) (Circle)
+
+Try to increase your score from case to case! (increase difficulty)
+
+
+
+*/
 }
 //function detectiveText(situation, suspect, category){
 //}
@@ -951,7 +1280,7 @@ function reset(difficulty){
 ////functions end, variables begin
 
 var NUM_CATEGORIES=5
-var P_FALSELY=1/3
+var P_FALSELY=0.4
 
 var pDist=generateDist()
 var chart=makeEvidenceChart(pDist,NUM_CATEGORIES)
@@ -962,9 +1291,11 @@ var chartUI=makeChartUI(chart,categoryName,boxWidth,54,275,250)
 var priorBoxes=makePriorsBoxes(pDist,boxWidth,275,525)
 var pBars=makePBars(pDist,boxWidth,310,137)
 var pDistReport=makePDistReport(pDist,boxWidth,305,141)
+var qMarks=makeQuestionMarks(4,boxWidth,280,20)
+qMarks.hide()
 var portraits=makePortraits(4,boxWidth,295,185)
 var sherlockBayesPortrait=makeSherlockBayes(55,240)
-var speechBubble=makeDetectiveBubble("Hello. I'm Sherlock Bayes. Are you a logical thinker? Then help me solve a gruesome murder mystery.</br></br>",[],260,225,4,4)
+var speechBubble=makeDetectiveBubble("Hello. I'm Sherlock Bayes. Are you a logical thinker? Then help me solve this murder mystery.</br></br>",["Next"],260,225,4,4)
 var suspectBubble=makeSuspectBubble("I didn't do it!", 0, boxWidth,370,14,290,160)
 
 var gameState=makeGameState()
@@ -973,7 +1304,10 @@ var gameStateUI=makeGameStateUI(gameState,12,460)
 
 
 
-
+var circle=makeCircle()
+//circle.move(270,170, 670,260)
+//circle.move(270,350, 670,610)
+//circle.hide()
 
 
 
