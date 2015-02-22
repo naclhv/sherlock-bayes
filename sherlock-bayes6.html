@@ -238,7 +238,10 @@ function processClick(suspect,category){
 			//eyewitnesses: highly variable accuracy
 			break
 	}
-	if (gameState.difficulty===1) {accuracy=1}
+	if (gameState.difficulty===1) {
+		accuracy=1
+		cost=8
+	}
 	var costReductionRate=0.2*Math.sqrt(chartUI[suspect][category].prevQ.length)
 	costReductionRate=Math.min(costReductionRate,0.75)
 	cost=Math.round(cost*(1-costReductionRate))
@@ -310,6 +313,20 @@ function reveal(chart,chartUI){
 			}
 			if (i===chart.culprit) {
 				chartUI[i][j].style.outline="red solid thin"
+			}
+		}
+	}
+}
+function conceal(chart,chartUI){
+	for (var i=0;i<chartUI.length;i++){
+		for (var j=0;j<chartUI[0].length;j++){
+			if (i%2===0){
+				chartUI[i][j].style.backgroundColor="khaki"
+			} else {
+				chartUI[i][j].style.backgroundColor="palegoldenrod"
+			}
+			if (i===chart.culprit) {
+				chartUI[i][j].style.outline=""
 			}
 		}
 	}
@@ -942,6 +959,9 @@ function processButton(buttonName){
 		speechBubble.update("Welcome to a new case, this is a big or a small one, look at the reward/penalties, Start investigating!",[])
 	} else if (gameState.difficulty===0 && (buttonName==="circle" || buttonName==="Next")) {
 		tutorial()
+	} else if (buttonName="Go to Easy Difficulty") {
+		gameState.difficulty=1
+		reset(1)
 	}
 	console.log(buttonName)
 }
@@ -962,6 +982,7 @@ function makeGameState(){
 			gameState.caseNumber++
 			var pGoal=0.34*Math.random()+0.65
 			//pGoal=0.65
+			if (gameState.caseNumber===1) {pGoal=0.8}
 			gameState.pGoal=pGoal
 			var ratio=pGoal/(1-pGoal)
 			var standardRatio=80/20
@@ -1051,6 +1072,7 @@ function reset(difficulty){
 	gameState.score=0
 	clearInterval(gameState.status.bleedResources)
 	gameState.status={}
+	circle.hide()
 	processButton("New case")
 	switch (difficulty) {
 		case 0:
@@ -1063,7 +1085,7 @@ function reset(difficulty){
 			speechBubble.update("On the 'Normal' difficulty, investigations generally have less than 100% accuracy. Furthermore, each suspect starts with a different prior probability of having commited the crime. <br/>Click on a box to investigate!",[])
 			break
 		case 3:
-			speechBubble.update("On the 'Hard' difficulty, each suspect's current probability of guilt is concealed, but you may see it randomly after an investigation. Furthermore, you don't know the exact accuracy of each investigation, as it's displayed after rounding off to the nearest 5%.<br/>Click on a box to investigate! ",[])
+			speechBubble.update("On the 'Hard' difficulty, each suspect's current probability of guilt is concealed. It may randomly appear after an investigation. Furthermore, you don't know the exact accuracy of each investigation, as it's displayed after rounding off to the nearest 5%.<br/>Click on a box to investigate! ",[])
 			break
 		case 4:
 			speechBubble.update("On the 'Very Hard' difficulty, you don't ever get to see the suspect's probabilities until the end of the case. Furthermore, you continuously lose one resource every five seconds.<br/>Click on a box to investigate!",[])
@@ -1112,18 +1134,19 @@ function tutorial() {
 			chart[2]=[false,false,true,false,false]
 			chart[3]=[true,false,true,false,true]
 			chart.culprit=1
-			pDist=[0.35,0.40,0.12,0.13]
+			pDist=[0.35,0.44,0.11,0.10]
+			priorBoxes.reset(pDist)
 			pBars.reset(pDist)
 			pDistReport.reset(pDist)
 			//reveal(chart,chartUI) //testing
 			gameState.status.caseOver=true
-			speechBubble.update("Our murderer is one of these four suspects.", ["Next","test"])
+			speechBubble.update("The murderer is one of these four suspects.", ["Next"])
 			circle.move(270,170, 670,260)
 			circle.onclick=function(){}
 			gameState.status.tutorial++
 			break		
 		case 1:
-			speechBubble.update("We will perform the investigation by clicking on these boxes.", ["Next"])
+			speechBubble.update("We will find out who it is by investigating various things about the suspects, by clicking on these boxes.", ["Next"])
 			circle.move(265,235, 675,545)
 			gameState.status.tutorial++
 			break
@@ -1163,7 +1186,7 @@ function tutorial() {
 			gameState.status.tutorial++
 			break
 		case 4:
-			speechBubble.update("Let's now look at the forensic evidence for Alice. Click on the 'Forensics' box under Alice.", [])
+			speechBubble.update("Let's now investigate the forensic evidence for Alice. Click on the 'Forensics' box under Alice.", [])
 			circle.move(270,245, 380,315)
 			circle.onclick=function(){
 				tutorial()
@@ -1194,12 +1217,17 @@ function tutorial() {
 			gameState.resources-=12
 			gameStateUI.update(gameState)
 
-			speechBubble.update("The red 75% means that according to forensics, there is a 75% chance that Alice had contact with the victim around the time of the murder. So there is still a 25% chance that she had NO contact with the victim, in which case she'd be innocent. Also, even if she did really have contact, that doesn't necessarily mean she's guilty.", ["Next"])
+			speechBubble.update("The red 75% means that according to forensics, there is a 75% chance that Alice had contact with the victim around the time of the murder. So there is still a 25% chance that she had NO contact with the victim, in which case she'd be innocent.", ["Next"])
 			circle.move(270,245, 380,315)
 			gameState.status.tutorial++
 			break
 		case 6:
-			speechBubble.update("Let's next look at the witness evidence concerning Alice. Click on the 'Witnesses' box under Alice.", [])
+			speechBubble.update("The positive result of our previous two investigations has increased Alice's chance of being guilty, but it is not yet certain. Each suspect's chance of being guilty is displayed above that persons' head, and it is updated after each investigation.", ["Next"])
+			circle.move(290,40, 360,165)
+			gameState.status.tutorial++
+			break
+		case 7:
+			speechBubble.update("Let's next look at the evidence from witnesses concerning Alice. Click on the 'Witnesses' box under Alice.", [])
 			circle.move(270,465, 380,530)
 			circle.onclick=function(){
 				tutorial()
@@ -1207,27 +1235,145 @@ function tutorial() {
 			}
 			gameState.status.tutorial++
 			break
-
-
-		case 7:
-			speechBubble.update("Our murderer is one of these four suspects4", ["Next"])
-			circle.move(270,170, 670,260)
-			gameState.status.tutorial++
-			break
 		case 8:
-			speechBubble.update("Our murderer is one of these four suspects4", ["Next"])
-			circle.move(270,170, 670,260)
+			var q={result:false,suspect:0,category:4,accuracy:1}
+			var post=bayesTheorem(q,pDist,chartUI)
+			for (var i=0;i<post.length;i++){
+				pDist[i]=post[i]
+			}
+			pBars.update(pDist)
+			pDistReport.update(pDist)
+			var box=chartUI[0][4]
+			box.innerHTML=""
+			var reportQ=makeSpan(box.prevQ[0],0,parseInt(box.style.width)/3,parseInt(box.style.height)/3)
+			box.appendChild(reportQ)
+			$(reportQ).animate({fontSize:"+=4", left:"-=2"},"fast").animate({fontSize:"-=4",left:"+=2"},"fast")	
+			suspectBubble.fadeIn(suspectsText("investigate"),0)
+			circle.onmouseleave=function(){
+				suspectBubble.fadeOut()
+				circle.onmouseleave=function(){}
+			}
+			portraits.changeExpression(0)
+			gameState.resources-=8
+			gameStateUI.update(gameState)
+
+			speechBubble.update("That green 100% means that Alice definitely does NOT match the description of the murderer given by the witnesses. Therefore, she cannot be the culprit. She is innocent.", ["Next"])
+			circle.move(270,465, 380,530)
 			gameState.status.tutorial++
 			break
 		case 9:
-			speechBubble.update("Our murderer is one of these four suspects4", ["Next"])
-			circle.move(270,170, 670,260)
+			speechBubble.update("Notice that her probability of being guilty has now dropped to 0% to reflect her proven innocence.", ["Next"])
+			circle.move(290,40, 360,165)
 			gameState.status.tutorial++
 			break
-		case 4:
-			speechBubble.update("Our murderer is one of these four suspects4", ["Next"])
-			circle.move(270,170, 670,260)
+		case 10:
+			speechBubble.update("This probability of being guilty is calculated from all the evidence we gathered in our investigations,", ["Next"])
+			circle.move(270,245, 380,525)
 			gameState.status.tutorial++
+			break
+		case 11:
+			speechBubble.update("Plus the prior probabilities that we had for the guilt of each suspect. These priors are the degrees to which you think a suspect might be guilty, BEFORE you gather any evidence for the case. It may reflect, for example, their prior criminal records.", ["Next"])
+			circle.move(270,515, 675,595)
+			gameState.status.tutorial++
+			break
+		case 12:
+			speechBubble.update("Looking at the probabilities, we see that Bob now has the highest chance of being guilty. So let's investigate his alibi. Click on the 'Alibi' box under Bob.", [])
+			circle.move(370,355, 480,420)
+			circle.onclick=function(){
+				tutorial()
+				circle.onclick=function(){}
+			}
+			gameState.status.tutorial++
+			break
+		case 13:
+			var q={result:true,suspect:1,category:2,accuracy:0.9}
+			var post=bayesTheorem(q,pDist,chartUI)
+			for (var i=0;i<post.length;i++){
+				pDist[i]=post[i]
+			}
+			pBars.update(pDist)
+			pDistReport.update(pDist)
+			var box=chartUI[1][2]
+			box.innerHTML=""
+			var reportQ=makeSpan(box.prevQ[0],0,parseInt(box.style.width)/3,parseInt(box.style.height)/3)
+			box.appendChild(reportQ)
+			$(reportQ).animate({fontSize:"+=4", left:"-=2"},"fast").animate({fontSize:"-=4",left:"+=2"},"fast")	
+			suspectBubble.fadeIn(suspectsText("investigate"),0)
+			circle.onmouseleave=function(){
+				suspectBubble.fadeOut()
+				circle.onmouseleave=function(){}
+			}
+			portraits.changeExpression(1)
+			gameState.resources-=8
+			gameStateUI.update(gameState)
+
+			speechBubble.update("The red 90% means that Bob offered a very weak alibi. There is a 90% chance that he actually has no alibi. Again, this doesn't necessarily mean that he's guilty, although of course it increases the chance.", ["Next"])
+			circle.move(370,355, 480,420)
+			gameState.status.tutorial++
+			break
+		case 14:
+			speechBubble.update("What, then, does actual guilt look like? Here we went ahead and 'cheated', by revealing the truth under each of the boxes we're investigating. A red box means that this evidence is compatible with this person being the culprit. A green box means that the evidence is incompatible, so the person must then be innocent.", ["Next"])
+			circle.hide()
+			reveal(chart,chartUI)
+			gameState.status.tutorial++
+			break
+		case 15:
+			speechBubble.update("So, for example, the forensic evidence actually indicates that Alice had NO contact with the victim, although she had the motive to commit the murder and a personal character capable of killing. Furthermore, she has a bulletproof alibi and does not match the descriptions given by the witnesses of the murderer.", ["Next"])
+			circle.move(270,145, 380,535)
+			gameState.status.tutorial++
+			break
+		case 16:
+			speechBubble.update("Notice that our particular investigation got it wrong on the forensics. It said that there was a 75% chance that Alice had contact with the victim, when in fact she did not. We shouldn't be too surprised, as our investigation still had a 25% chance to be wrong.", ["Next"])
+			circle.move(270,245, 380,315)
+			gameState.status.tutorial++
+			break
+		case 17:
+			speechBubble.update("Dan, on the other hand, is someone who had contact with the victim, has no alibi, and matches the description given by the witnesses - all of which make him look guilty. But he also has no motive and a personal character incapable of committing a murder. He is therefore actualy innocent.", ["Next"])
+			circle.move(570,145, 675,535)
+			gameState.status.tutorial++
+			break
+		case 18:
+			speechBubble.update("The true culprit is the one whose entire column is red in every box: Bob. He is compatible with all of the evidence of each type. In each murder case, there will only be one suspect whose entire column of boxes will be red, and that person will be the true culprit. All other suspects will have at least one green box which indicates that they could not be the murderer.", ["Next"])
+			circle.move(370,145, 475,535)
+			gameState.status.tutorial++
+			break
+		case 19:
+			speechBubble.update("But even the innocent suspects have about a 40% chance for a given box to be red. They were just unlucky in some way - they might have been at the wrong place at the wrong time, like Dan having had contact with the victim despite him being innocent.", ["Next"])
+			circle.move(570,245, 675,315)
+			gameState.status.tutorial++
+			break
+		case 20:
+			speechBubble.update("Let's hide the answers again and go back to our case: Looking at the probability of guilt, we see that Bob is likely to be guilty based on the priors and the evidence we've gathered. (That, and we just 'cheated' and know that he's the culprit.) So let's accuse him as the murderer. Click on his portrait to make the accusation.", [])
+			circle.move(385,170, 460,255)
+			conceal(chart,chartUI)
+			circle.onclick=function(){
+				tutorial()
+				circle.onmouseleave=function(){}
+				circle.onmouseenter=function(){}
+				circle.onclick=function(){}
+			}
+			circle.onmouseenter=function(){
+				portraits.changeExpression(1,["alert.png","sad.png","surprised.png","flustered.png"])
+				suspectBubble.fadeIn(suspectsText("preAccuse"),1)
+			}
+			circle.onmouseleave=function(){
+				suspectBubble.fadeOut()
+			}
+			gameState.status.tutorial++
+			break
+		case 21:
+			speechBubble.update("Our participation in the case is over after we make an accusation. The police take over, the solution is revealed, and we score reward or penalty points depending on whether we got the right person. Our score also changes by how much resources we have remaining. (Resources are used each time you investigate a box.) </br></br>This tutorial case is now closed.", ["Next"])
+			circle.move(1,450, 170,615)
+			reveal(chart,chartUI)
+			suspectBubble.fadeIn(suspectsText("accuse"),1)
+			portraits.changeExpression(1,["pained.png"])
+			gameState.endCase(true) 
+			gameStateUI.update(gameState)
+			gameState.status.tutorial++
+			break
+		case 22:
+			speechBubble.update("Good luck on the real cases. Try to score the highest number of points in each case!", ["Go to Easy Difficulty"])
+			circle.hide()
 			break
 }
 
@@ -1255,7 +1401,9 @@ The red 90% means that Bob offered a very weak alibi. There is a 90% chance that
 
 What, then, does actual guilt look like? Here we went ahead and 'cheated', by revealing the truth under each box we're investigating. A red box means that this evidence is compatible with this person being the culprit, whereas a green box means that the evidence is incompatible with the guilt of this suspect, who must then be innocent. (reveal)
 
-So, for example, the forensic evidence actually indicates that Alice had NO contact with the victim, although she had the motive to commit the murder and a personal character capable of killing. Furthermore, she has a bulletproof alibi and does not match the witness descriptions of the murderer. Notice that our particular investigation got it wrong on the forensics: This is not unexpected, as our forensics investigation only had a 75% accuracy and so still had a 25% chance to be wrong. (circle)
+So, for example, the forensic evidence actually indicates that Alice had NO contact with the victim, although she had the motive to commit the murder and a personal character capable of killing. Furthermore, she has a bulletproof alibi and does not match the witness descriptions of the murderer. 
+
+Notice that our particular investigation got it wrong on the forensics: This is not unexpected, as our forensics investigation only had a 75% accuracy and so still had a 25% chance to be wrong. (circle)
 
 Dan, on the other hand, is someone who had contact with the victim, has no alibi, and matches the witness description of the murderer, but he has no motive and a personal character incapable of committing a murder. He is therefore innocent. (circle)
 
@@ -1299,15 +1447,10 @@ var speechBubble=makeDetectiveBubble("Hello. I'm Sherlock Bayes. Are you a logic
 var suspectBubble=makeSuspectBubble("I didn't do it!", 0, boxWidth,370,14,290,160)
 
 var gameState=makeGameState()
+gameState.status.caseOver=true
 var gameStateUI=makeGameStateUI(gameState,12,460)
 //foo.selector.selectedIndex="2"
-
-
-
 var circle=makeCircle()
-//circle.move(270,170, 670,260)
-//circle.move(270,350, 670,610)
-//circle.hide()
 
 
 
