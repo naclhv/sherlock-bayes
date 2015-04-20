@@ -1,6 +1,6 @@
 # sherlock-bayes
 
-A game that teaches Bayesian reasoning.
+A great game that teaches Bayesian reasoning.
 
 Can be found at:
 
